@@ -2,6 +2,7 @@ import os
 import sys
 import cv2
 import time
+import colorsys
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QFileDialog, QFrame, QSlider)
 from PyQt6.QtGui import QImage, QPixmap
@@ -30,8 +31,11 @@ class YOLOVideoPlayer(QMainWindow):
         """初始化用户界面"""
         self.setWindowTitle("AI蒙皮铝屑观察助手")
         self.setGeometry(100, 100, 1000, 600)
+        self.setStyleSheet("background-color: #272822; color: #FFFFFF;")
 
         central_widget = QWidget()
+        central_widget.setStyleSheet(
+            "background-color: #272822; color: #FFFFFF;")
         self.setCentralWidget(central_widget)
 
         main_layout = QHBoxLayout()
@@ -44,30 +48,53 @@ class YOLOVideoPlayer(QMainWindow):
         """创建侧边栏"""
         sidebar = QFrame()
         sidebar.setFrameShape(QFrame.Shape.StyledPanel)
-        sidebar.setFixedWidth(220)
+        sidebar.setFixedWidth(250)  # 稍微加宽以容纳更多刻度
+        sidebar.setStyleSheet("""
+            background-color: #272822; 
+            border: 1px solid #75715E;
+            color: #FFFFFF;
+        """)
 
         sidebar_layout = QVBoxLayout()
         sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         sidebar.setLayout(sidebar_layout)
 
         title_label = QLabel("功能面板")
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title_label.setStyleSheet("""
+            font-weight: bold; 
+            font-size: 14px; 
+            background-color: #272822;
+            color: #FFFFFF;
+        """)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_layout.addWidget(title_label)
 
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet("color: #75715E;")
         sidebar_layout.addWidget(separator)
 
         self.load_model_btn = QPushButton("加载YOLO模型")
+        self.load_model_btn.setStyleSheet("""
+            background-color: #3E3D32;
+            color: #FFFFFF;
+        """)
         self.load_model_btn.clicked.connect(self.load_model)
         sidebar_layout.addWidget(self.load_model_btn)
 
         self.open_video_btn = QPushButton("打开视频文件")
+        self.open_video_btn.setStyleSheet("""
+            background-color: #3E3D32;
+            color: #FFFFFF;
+        """)
         self.open_video_btn.clicked.connect(self.open_video)
         sidebar_layout.addWidget(self.open_video_btn)
 
         self.start_stop_btn = QPushButton("开始检测")
+        self.start_stop_btn.setStyleSheet("""
+            background-color: #3E3D32;
+            color: #FFFFFF;
+        """)
         self.start_stop_btn.clicked.connect(self.toggle_video)
         self.start_stop_btn.setEnabled(False)
         sidebar_layout.addWidget(self.start_stop_btn)
@@ -77,46 +104,122 @@ class YOLOVideoPlayer(QMainWindow):
 
         separator_bottom = QFrame()
         separator_bottom.setFrameShape(QFrame.Shape.HLine)
+        separator_bottom.setStyleSheet("color: #75715E;")
         sidebar_layout.addWidget(separator_bottom)
 
         self.fps_label = QLabel("FPS: --")
         self.fps_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.fps_label.setStyleSheet(
-            "font-weight: bold; font-size: 16px; color: #333; padding: 5px; background-color: #f0f0f0; border-radius: 4px;")
+        self.fps_label.setStyleSheet("""
+            font-weight: bold; 
+            font-size: 16px; 
+            background-color: #3E3D32; 
+            border-radius: 4px;
+            color: #FFFFFF;
+        """)
         sidebar_layout.addWidget(self.fps_label)
 
         main_layout.addWidget(sidebar)
 
+    def hsv_to_hex(self, h, s, v):
+        """将HSV颜色转换为十六进制"""
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        return "#{:02X}{:02X}{:02X}".format(int(r*255), int(g*255), int(b*255))
+
     def add_confidence_slider(self, layout):
-        """添加置信度调节滑块"""
+        """添加置信度调节滑块(使用HSV颜色空间)"""
         confidence_label = QLabel("置信度阈值: 0.5")
         confidence_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        confidence_label.setStyleSheet("font-weight: bold;")
+        confidence_label.setStyleSheet("""
+            font-weight: bold; 
+            background-color: #272822;
+            color: #FFFFFF;
+        """)
         layout.addWidget(confidence_label)
 
         self.confidence_slider = QSlider(Qt.Orientation.Horizontal)
-        self.confidence_slider.setRange(10, 100)
+        self.confidence_slider.setRange(10, 100)  # 0.1到1.0，步长0.01
         self.confidence_slider.setValue(50)
+
+        # 设置刻度位置和样式
         self.confidence_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.confidence_slider.setTickInterval(10)  # 每0.1一个刻度
+        self.confidence_slider.setSingleStep(1)    # 步长0.01
+
+        # 初始滑块样式
+        self.update_slider_style(50, confidence_label)
+
         self.confidence_slider.valueChanged.connect(
-            lambda: self.update_confidence(confidence_label))
+            lambda value: self.update_slider_style(value, confidence_label))
         layout.addWidget(self.confidence_slider)
 
-    def update_confidence(self, label):
-        """更新置信度阈值"""
-        confidence = self.confidence_slider.value() / 100.0
-        self.processor.set_confidence(confidence)
+    def update_slider_style(self, value, label):
+        """更新滑块样式和标签(使用HSV颜色空间)"""
+        confidence = value / 100.0
         label.setText(f"置信度阈值: {confidence:.2f}")
+        self.processor.set_confidence(confidence)
+
+        # HSV颜色空间: 从蓝色(240°)到红色(0°)
+        hue = (1.0 - confidence) * 240 / 360  # 归一化到0-1
+        saturation = 0.9
+        value = 0.9
+
+        # 获取当前颜色
+        color_hex = self.hsv_to_hex(hue, saturation, value)
+
+        # 刻度标记样式
+        tick_style = """
+            QSlider::sub-page:horizontal {{
+                background: {color};
+                height: 8px;
+                border-radius: 4px;
+            }}
+            QSlider::groove:horizontal {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #0000FF,    /* 蓝色 */
+                    stop:0.5 #00FF00,  /* 绿色 */
+                    stop:1 #FF0000);   /* 红色 */
+                height: 8px;
+                border-radius: 4px;
+            }}
+            QSlider::handle:horizontal {{
+                background: #F8F8F2;
+                width: 16px;
+                margin: -4px 0;
+                border-radius: 8px;
+            }}
+            QSlider::add-page:horizontal {{
+                background: #75715E;
+                height: 8px;
+                border-radius: 4px;
+            }}
+        """.format(color=color_hex)
+
+        # 添加刻度标记
+        tick_style += """
+            QSlider::sub-control:bottom {{
+                margin-top: 10px;
+            }}
+            QSlider::tick:below {{
+                height: 4px;
+                width: 1px;
+                background: #F8F8F2;
+            }}
+        """
+
+        self.confidence_slider.setStyleSheet(tick_style)
 
     def create_video_area(self, main_layout):
         """创建视频显示区域"""
         video_container = QWidget()
+        video_container.setStyleSheet(
+            "background-color: #272822; color: #FFFFFF;")
         video_layout = QVBoxLayout()
         video_container.setLayout(video_layout)
 
         self.video_label = QLabel()
         self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video_label.setMinimumSize(640, 480)
+        self.video_label.setStyleSheet("background-color: #272822;")
         video_layout.addWidget(self.video_label)
 
         main_layout.addWidget(video_container, stretch=1)
