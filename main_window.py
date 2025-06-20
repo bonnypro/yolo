@@ -89,6 +89,15 @@ class YOLOVideoPlayer(QMainWindow):
         self.load_model_btn.clicked.connect(self.load_model)
         sidebar_layout.addWidget(self.load_model_btn)
 
+        # 添加摄像头按钮
+        self.open_camera_btn = QPushButton("打开USB摄像头")
+        self.open_camera_btn.setStyleSheet("""
+            background-color: #3E3D32;
+            color: #FFFFFF;
+        """)
+        self.open_camera_btn.clicked.connect(self.open_camera)
+        sidebar_layout.addWidget(self.open_camera_btn)
+
         self.open_video_btn = QPushButton("打开视频文件")
         self.open_video_btn.setStyleSheet("""
             background-color: #3E3D32;
@@ -217,7 +226,6 @@ class YOLOVideoPlayer(QMainWindow):
 
         self.confidence_slider.setStyleSheet(tick_style)
 
-    # 添加新的动画方法
     def update_pulse_effect(self):
         """更新脉冲动画效果"""
         if not self.timer.isActive():
@@ -269,6 +277,17 @@ class YOLOVideoPlayer(QMainWindow):
             success, message = self.processor.load_model(model_path)
             self.statusBar().showMessage(message, 3000)
             self.check_ready_state()
+
+    def open_camera(self):
+        """打开USB摄像头"""
+        if self.processor.open_camera(0):  # 默认使用索引0的摄像头
+            self.statusBar().showMessage("摄像头已打开", 3000)
+            self.check_ready_state()
+            # 立即开始检测
+            if not self.timer.isActive():
+                self.toggle_video()
+        else:
+            self.statusBar().showMessage("无法打开摄像头", 3000)
 
     def open_video(self):
         """打开视频文件"""
