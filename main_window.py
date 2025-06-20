@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QLabel, QVBoxLayout, QHB
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt, QTimer
 from video_processor import VideoProcessor
+import math
 
 
 class YOLOVideoPlayer(QMainWindow):
@@ -15,9 +16,15 @@ class YOLOVideoPlayer(QMainWindow):
         super().__init__()
         self.processor = VideoProcessor()
         self.timer = QTimer(self)
+        # 添加动画相关属性
+        self.pulse_animation = None
+        self.pulse_timer = QTimer(self)
+        self.pulse_phase = 0
+        self.pulse_speed = 0.05
 
         self.initUI()
         self.timer.timeout.connect(self.update_frame)
+        self.pulse_timer.timeout.connect(self.update_pulse_effect)  # 连接信号
         self.load_default_model()
 
     def load_default_model(self):
@@ -94,6 +101,8 @@ class YOLOVideoPlayer(QMainWindow):
         self.start_stop_btn.setStyleSheet("""
             background-color: #3E3D32;
             color: #FFFFFF;
+            border: none;
+            border-radius: 1px;                                                                   
         """)
         self.start_stop_btn.clicked.connect(self.toggle_video)
         self.start_stop_btn.setEnabled(False)
@@ -208,6 +217,34 @@ class YOLOVideoPlayer(QMainWindow):
 
         self.confidence_slider.setStyleSheet(tick_style)
 
+    # 添加新的动画方法
+    def update_pulse_effect(self):
+        """更新脉冲动画效果"""
+        if not self.timer.isActive():
+            self.pulse_timer.stop()
+            self.start_stop_btn.setStyleSheet("""
+                background-color: #3E3D32;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 4px;
+            """)
+            return
+
+        self.pulse_phase += self.pulse_speed
+        if self.pulse_phase > 1:
+            self.pulse_phase = 0
+        # 使用正弦函数创建平滑的脉冲效果
+        alpha = 0.3 + 0.7 * \
+            (0.5 + 0.5 * math.sin(self.pulse_phase * 2 * math.pi))
+        color = f"rgba(0, 120, 215, {alpha})"  # 蓝色脉冲
+
+        self.start_stop_btn.setStyleSheet(f"""
+            background-color: {color};
+            color: #FFFFFF;
+            border: none;
+            border-radius: 4px;
+        """)
+
     def create_video_area(self, main_layout):
         """创建视频显示区域"""
         video_container = QWidget()
@@ -255,6 +292,7 @@ class YOLOVideoPlayer(QMainWindow):
         """开始/停止视频检测"""
         if self.timer.isActive():
             self.timer.stop()
+            self.pulse_timer.stop()
             self.start_stop_btn.setText("开始检测")
             self.statusBar().showMessage("检测已停止", 2000)
             self.fps_label.setText("FPS: --")
@@ -262,6 +300,7 @@ class YOLOVideoPlayer(QMainWindow):
             self.processor.frame_count = 0
             self.processor.last_time = time.time()
             self.timer.start(30)
+            self.pulse_timer.start(50)  # 每50毫秒更新一次动画
             self.start_stop_btn.setText("停止检测")
             self.statusBar().showMessage("检测已开始", 2000)
 
