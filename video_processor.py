@@ -11,6 +11,7 @@ class VideoProcessor:
         self.fps = 0
         self.last_time = time.time()
         self.confidence_threshold = 0.5
+        self.camera_index = None  # 存储摄像头索引
 
     def load_model(self, model_path):
         """加载YOLO模型"""
@@ -22,7 +23,16 @@ class VideoProcessor:
 
     def open_video(self, video_path):
         """打开视频文件"""
+        self.release()  # 先释放之前的资源
+        self.camera_index = None  # 重置摄像头索引
         self.cap = cv2.VideoCapture(video_path)
+        return self.cap.isOpened()
+
+    def open_camera(self, camera_index=0):
+        """打开USB摄像头"""
+        self.release()  # 先释放之前的资源
+        self.camera_index = camera_index  # 存储摄像头索引
+        self.cap = cv2.VideoCapture(camera_index)
         return self.cap.isOpened()
 
     def get_frame(self):
@@ -32,9 +42,14 @@ class VideoProcessor:
 
         ret, frame = self.cap.read()
         if not ret:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            ret, frame = self.cap.read()
-            return frame, ret
+            # 如果是视频文件，循环播放
+            if self.camera_index is None:
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = self.cap.read()
+                return frame, ret
+            else:
+                # 如果是摄像头，返回空帧
+                return None, False
 
         if self.model is not None:
             results = self.model(frame, conf=self.confidence_threshold)
@@ -61,3 +76,4 @@ class VideoProcessor:
         """释放视频资源"""
         if self.cap is not None and self.cap.isOpened():
             self.cap.release()
+        self.cap = None
