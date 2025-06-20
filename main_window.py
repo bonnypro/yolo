@@ -86,8 +86,8 @@ class YOLOVideoPlayer(QMainWindow):
         # 添加按钮
         buttons = [
             ("加载YOLO模型", self.load_model),
-            ("打开USB摄像头", self.open_camera),
-            ("打开视频文件", self.open_video),
+            ("使用USB摄像头", self.open_camera),
+            ("使用视频文件", self.open_video),
         ]
 
         for text, callback in buttons:
