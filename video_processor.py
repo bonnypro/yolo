@@ -39,10 +39,15 @@ class VideoProcessor:
         ret, frame = self.cap.read()
         if not ret:
             if self.camera_index is None:
+                # 视频文件结束，重新开始播放
                 self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 ret, frame = self.cap.read()
+                if not ret:
+                    # 如果重新读取仍然失败，返回None
+                    return None, False
                 return frame, ret
             else:
+                # 摄像头读取失败
                 return None, False
 
         return frame, ret

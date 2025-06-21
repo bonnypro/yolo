@@ -10,6 +10,7 @@ from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt, QTimer
 from video_processor import VideoProcessor
 import math
+import platform
 
 APP_VERSION = "v1.0.0 by Chang"
 
@@ -288,6 +289,7 @@ class YOLOVideoPlayer(QMainWindow):
         self.confidence_slider.setStyleSheet(tick_style)
 
     def load_model(self):
+        self.exit_recording_mode()
         model_path, _ = QFileDialog.getOpenFileName(
             self, "选择YOLO模型文件", "", "模型文件 (*.pt)")
         if model_path:
@@ -338,11 +340,19 @@ class YOLOVideoPlayer(QMainWindow):
                 self.processor.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     def check_ready_state(self):
-        self.start_stop_btn.setEnabled(self.processor.model is not None and
-                                       self.processor.cap is not None and
-                                       self.processor.cap.isOpened())
+        # 在录制模式下，开始检测按钮应该被禁用
+        if self.recording_mode:
+            self.start_stop_btn.setEnabled(False)
+        else:
+            self.start_stop_btn.setEnabled(self.processor.model is not None and
+                                           self.processor.cap is not None and
+                                           self.processor.cap.isOpened())
 
     def toggle_video(self):
+        # 在录制模式下，不允许切换检测状态
+        if self.recording_mode:
+            return
+            
         if self.timer.isActive():
             self.timer.stop()
             self.pulse_timer.stop()
@@ -449,15 +459,28 @@ class YOLOVideoPlayer(QMainWindow):
         else:
             self.statusBar().showMessage("无法打开摄像头", 3000)
             self.recording_mode = False
+            # 重置录制相关状态
+            self.record_panel.setVisible(False)
+            self.recording_label.setVisible(False)
+            self.start_stop_btn.setEnabled(True)
 
     def exit_recording_mode(self):
         if self.recording_mode:
             if self.recording:
                 self.stop_recording()
+
+            # 停止为录制模式启动的预览定时器
+            if self.timer.isActive():
+                self.timer.stop()
+                if self.pulse_timer.isActive():
+                    self.pulse_timer.stop()
+            
             self.record_panel.setVisible(False)
             self.recording_label.setVisible(False)
             self.recording_mode = False
             self.start_stop_btn.setEnabled(True)
+            self.reset_button_style()  # 重置按钮状态
+            self.fps_label.setText("FPS: --")
 
     def select_record_path(self):
         default_path = os.path.join(os.getcwd(), "training_data")
@@ -466,15 +489,24 @@ class YOLOVideoPlayer(QMainWindow):
 
         # 生成带时间戳的默认文件名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_file = os.path.join(default_path, f"training_{timestamp}.mp4")
+        if platform.system() == "Windows":
+            default_file = os.path.join(default_path, f"training_{timestamp}.mp4")
+            file_filter = "视频文件 (*.mp4)"
+        else:
+            default_file = os.path.join(default_path, f"training_{timestamp}.avi")
+            file_filter = "视频文件 (*.avi)"
 
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "保存训练视频", default_file, "视频文件 (*.mp4)")
+            self, "保存训练视频", default_file, file_filter)
 
         if file_path:
-            # 确保文件以.mp4结尾
-            if not file_path.lower().endswith('.mp4'):
-                file_path += '.mp4'
+            # 确保文件以正确的扩展名结尾
+            if platform.system() == "Windows":
+                if not file_path.lower().endswith('.mp4'):
+                    file_path += '.mp4'
+            else:
+                if not file_path.lower().endswith('.avi'):
+                    file_path += '.avi'
             self.record_path = file_path
             self.statusBar().showMessage(f"视频将保存到: {file_path}", 3000)
 
@@ -495,8 +527,16 @@ class YOLOVideoPlayer(QMainWindow):
         if fps <= 0:
             fps = 30
 
-        # 使用MP4格式的fourcc编码
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 注意：在Windows上可能需要使用'MP4V'
+        # 根据操作系统选择合适的编码器
+        if platform.system() == "Windows":
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        else:
+            # Linux系统使用更兼容的编码器
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            # 如果文件路径是mp4，改为avi格式
+            if self.record_path.lower().endswith('.mp4'):
+                self.record_path = self.record_path[:-4] + '.avi'
+        
         self.video_writer = cv2.VideoWriter(
             self.record_path, fourcc, fps, (width, height))
 
@@ -535,12 +575,26 @@ class YOLOVideoPlayer(QMainWindow):
             self.record_btn.setStyleSheet(self.RECORD_BUTTON_STYLE)
 
     def closeEvent(self, event):
-        if self.recording and self.video_writer is not None:
-            self.video_writer.release()
-
-        self.processor.release()
+        # 停止所有定时器
         if self.timer.isActive():
             self.timer.stop()
+        if self.pulse_timer.isActive():
+            self.pulse_timer.stop()
+        if self.record_timer.isActive():
+            self.record_timer.stop()
+        
+        # 停止录制并释放视频写入器
+        if self.recording and self.video_writer is not None:
+            self.video_writer.release()
+            self.video_writer = None
+
+        # 退出录制模式
+        if self.recording_mode:
+            self.exit_recording_mode()
+
+        # 释放视频处理器资源
+        self.processor.release()
+        
         event.accept()
 
 
