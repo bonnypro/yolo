@@ -1,6 +1,10 @@
 import os
 from datetime import datetime
 from ultralytics import YOLO
+import cv2
+import numpy as np
+
+from config import DETECTABLE_CLASSES
 
 
 class ModelHandler:
@@ -24,13 +28,55 @@ class ModelHandler:
             return self.load_model("best.pt")
         return False, "默认模型文件不存在"
 
-    def predict(self, frame):
-        """对帧进行推理"""
+    def process_frame(self, frame, confidence_threshold=None, roi=None):
+        """处理帧，支持ROI和置信度设置"""
         if self.model is None:
-            return frame
+            return frame, False
         
-        results = self.model(frame, conf=self.confidence_threshold)
-        return results[0].plot()
+        # 设置置信度
+        if confidence_threshold is not None:
+            self.confidence_threshold = confidence_threshold
+        
+        # 如果有ROI处理器，使用ROI检测
+        if roi and hasattr(roi, 'is_roi_enabled') and roi.is_roi_enabled():
+            # 创建ROI掩码
+            mask = roi.create_roi_mask(frame.shape)
+            
+            # 在ROI区域内进行检测
+            results = self.model(frame, conf=self.confidence_threshold, classes=DETECTABLE_CLASSES)
+            
+            # 先获取所有检测框
+            boxes = results[0].boxes.xyxy.cpu().numpy()
+            confs = results[0].boxes.conf.cpu().numpy()
+            class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
+
+            # 过滤出在ROI区域内的检测框
+            filtered_boxes = []
+            detected_class0 = False
+            if len(boxes) > 0:
+                roi_points = np.array(roi.get_roi_points(roi.get_active_roi_name()), dtype=np.int32)
+                for i, box in enumerate(boxes):
+                    x1, y1, x2, y2 = box
+                    center_x, center_y = (x1 + x2) / 2, (y1 + y2) / 2
+                    if cv2.pointPolygonTest(roi_points, (center_x, center_y), False) >= 0:
+                        filtered_boxes.append((box, confs[i], class_ids[i]))
+                        if class_ids[i] == 0:
+                            detected_class0 = True
+            
+            # 在原始帧的副本上绘制过滤后的检测框
+            result_frame = frame.copy()
+            for box, conf, class_id in filtered_boxes:
+                x1, y1, x2, y2 = map(int, box)
+                label = f"{self.model.names[class_id]} {conf:.2f}"
+                cv2.rectangle(result_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(result_frame, label, (x1, y1 - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+            
+            return result_frame, detected_class0
+        else:
+            # 正常检测
+            results = self.model(frame, conf=self.confidence_threshold, classes=DETECTABLE_CLASSES)
+            return results[0].plot(), False
 
     def set_confidence(self, confidence):
         """设置置信度阈值"""
