@@ -8,6 +8,7 @@ import traceback
 import glob
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict, Any
+from config import ROI_CONFIG
 
 # 设置日志记录器
 logger = logging.getLogger(__name__)
@@ -19,10 +20,11 @@ class ROIHandler:
         self.roi_enabled = False  # ROI是否启用
         self.roi_mode = False  # 是否处于ROI绘制模式
         self.current_points = []  # 当前正在绘制的点
-        self.roi_folder = "roi_configs"  # ROI文件夹
-        self.temp_file = os.path.join(self.roi_folder, "temp_roi.json")  # 临时ROI文件
+        self.roi_folder = ROI_CONFIG["roi_folder"]  # ROI文件夹
+        self.temp_file = os.path.join(self.roi_folder, ROI_CONFIG["temp_roi_file"])  # 临时ROI文件
         self._saving = False  # 防止保存过程中重新加载
-        self.max_roi_count = 99  # 最大ROI数量限制
+        self.max_roi_count = ROI_CONFIG["max_roi_count"]  # 最大ROI数量限制
+        self.max_points = ROI_CONFIG["max_points"]  # 最大点数
         
         # 确保ROI文件夹存在
         self._ensure_roi_folder()
@@ -115,12 +117,11 @@ class ROIHandler:
             return roi_names
         
         try:
-            # 获取所有.json文件，排除temp_roi.json和roi_config.json
+            # 获取所有.json文件，排除临时和主配置文件
             roi_files = glob.glob(os.path.join(self.roi_folder, "*.json"))
             for roi_file in roi_files:
                 filename = os.path.basename(roi_file)
-                if filename not in ["temp_roi.json", "roi_config.json"]:
-                    # 去掉.json扩展名
+                if filename not in [ROI_CONFIG["temp_roi_file"], ROI_CONFIG["main_config_file"]]:
                     roi_name = os.path.splitext(filename)[0]
                     roi_names.append(roi_name)
             
@@ -149,7 +150,7 @@ class ROIHandler:
         if not self.roi_mode:
             return False
         
-        if len(self.current_points) >= 100:
+        if len(self.current_points) >= self.max_points:
             return False
 
         self.current_points.append([x, y])
@@ -278,15 +279,10 @@ class ROIHandler:
     def update_roi_points(self, roi_name: str, points: List[List[int]]) -> bool:
         """更新ROI点坐标"""
         if roi_name in self.roi_configs:
-            # 点的数量不能超过100
-            if len(points) > 100:
+            if len(points) > self.max_points:
                 return False
-            
-            # 更新内存中的配置
             self.roi_configs[roi_name]["points"] = points
             self.roi_configs[roi_name]["last_used"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
-            # 保存到文件
             if self._save_roi_to_file(roi_name, self.roi_configs[roi_name]):
                 self.save_config()
                 return True
