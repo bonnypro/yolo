@@ -19,6 +19,9 @@ DEFAULT_SETTINGS = {
     "training_data_dir": "training_data"
 }
 
+# 模型相关设置
+DETECTABLE_CLASSES = [0]  # 要检测的类别ID列表，None表示检测所有类别
+
 # UI样式定义
 STYLES = {
     "BACKGROUND": "background-color: #272822; color: #FFFFFF;",
@@ -78,7 +81,16 @@ STYLES = {
     """,
     "RECORDING_LABEL": "color: #FFFFFF; font-weight: bold; font-size: 16px;",
     "RECORDING_ACTIVE": "color: #FF0000; font-weight: bold; font-size: 16px;",
-    "CONFIDENCE_LABEL": "font-weight: bold; background-color: #272822; color: #FFFFFF;"
+    "CONFIDENCE_LABEL": "font-weight: bold; background-color: #272822; color: #FFFFFF;",
+    "DISABLED_BUTTON": """
+        background-color: #BDBDBD;
+        color: #FFFFFF;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        padding: 12px 24px;
+        font-weight: bold;
+    """
 }
 
 # 功能按钮配置
@@ -86,6 +98,7 @@ FUNCTION_BUTTONS = [
     ("加载AI模型", "load_model"),
     ("使用USB摄像头", "open_camera"),
     ("使用视频文件", "open_video"),
+    ("设置ROI区域", "setup_roi_mode"),
     ("录制训练数据", "setup_recording_mode"),
 ]
 

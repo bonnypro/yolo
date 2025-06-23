@@ -22,7 +22,22 @@ class VideoHandler:
         """打开摄像头"""
         self.release()
         self.camera_index = camera_index
-        self.cap = cv2.VideoCapture(camera_index)
+        
+        api_preference = None
+        if platform.system() == "Windows":
+            api_preference = cv2.CAP_DSHOW
+        elif platform.system() == "Linux":
+            api_preference = cv2.CAP_V4L2
+        
+        if api_preference is not None:
+            self.cap = cv2.VideoCapture(camera_index, api_preference)
+        else:
+            self.cap = cv2.VideoCapture(camera_index)
+
+        # 如果首选API失败，则尝试使用默认API
+        if not self.cap.isOpened():
+            self.cap = cv2.VideoCapture(camera_index)
+            
         return self.cap.isOpened()
 
     def open_video(self, video_path):
@@ -64,27 +79,21 @@ class VideoHandler:
         return None
 
     def start_recording(self, record_path):
-        """开始录制"""
+        """开始录制（仅支持Linux下mp4）"""
         if not self.cap or not self.cap.isOpened():
             return False, "没有可用的视频源"
 
-        # 确保目录存在
         os.makedirs(os.path.dirname(record_path), exist_ok=True)
-
         width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = int(self.cap.get(cv2.CAP_PROP_FPS))
         if fps <= 0:
             fps = 30
 
-        # 根据操作系统选择合适的编码器
-        if platform.system() == "Windows":
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        else:
-            fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            # 如果文件路径是mp4，改为avi格式
-            if record_path.lower().endswith('.mp4'):
-                record_path = record_path[:-4] + '.avi'
+        # 只允许mp4
+        if not record_path.lower().endswith('.mp4'):
+            record_path += '.mp4'
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
         self.video_writer = cv2.VideoWriter(
             record_path, fourcc, fps, (width, height))
@@ -116,6 +125,10 @@ class VideoHandler:
 
     def is_video_ready(self):
         """检查视频源是否就绪"""
+        return self.cap is not None and self.cap.isOpened()
+
+    def is_running(self):
+        """检查视频流是否正在运行"""
         return self.cap is not None and self.cap.isOpened()
 
     def release(self):
