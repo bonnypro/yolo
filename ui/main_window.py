@@ -53,6 +53,9 @@ class MainWindow(QMainWindow):
         self.roi_alert_timer.setInterval(200)
         self.roi_alert_timer.timeout.connect(self._toggle_roi_alert_flash)
         
+        # 添加检测控制标志
+        self.should_stop_detection = False
+        
         self.init_ui()
         self.setup_timers()
         self.load_default_model()
@@ -214,6 +217,9 @@ class MainWindow(QMainWindow):
             self.roi_panel.clear_roi_btn.setEnabled(True)
             self.roi_panel.roi_selector.setEnabled(True)
             self.roi_panel.clear_roi_btn.setText("删除ROI")
+            # 允许开始检测
+            if self.roi_mode and self.model_handler.is_model_loaded() and self.video_handler.is_video_ready():
+                self.start_stop_btn.setEnabled(True)
         
         elif self.ui_state == UIState.VIEWING:
             self.roi_panel.create_new_roi_btn.setEnabled(True)
@@ -221,6 +227,9 @@ class MainWindow(QMainWindow):
             self.roi_panel.clear_roi_btn.setEnabled(True)
             self.roi_panel.roi_selector.setEnabled(True)
             self.roi_panel.clear_roi_btn.setText("删除ROI")
+            # 允许开始检测
+            if self.roi_mode and self.model_handler.is_model_loaded() and self.video_handler.is_video_ready():
+                self.start_stop_btn.setEnabled(True)
 
         elif self.ui_state == UIState.CREATING:
             self.roi_panel.create_new_roi_btn.setEnabled(False)
@@ -228,6 +237,8 @@ class MainWindow(QMainWindow):
             self.roi_panel.clear_roi_btn.setEnabled(True)
             self.roi_panel.roi_selector.setEnabled(False)
             self.roi_panel.clear_roi_btn.setText("取消创建")
+            # 创建ROI时禁用开始检测按钮
+            self.start_stop_btn.setEnabled(False)
 
     def video_mouse_press_event(self, event):
         """视频区域的鼠标点击事件"""
@@ -237,6 +248,10 @@ class MainWindow(QMainWindow):
         if event.button() == Qt.MouseButton.LeftButton:
             # 任何添加点的行为都应视为开始编辑
             self.is_editing_roi = True
+            
+            # 如果正在检测，暂停检测
+            if self.timer.isActive():
+                self.toggle_video()
             
             # 获取点击位置（相对于QLabel的坐标）
             pos = event.pos()
@@ -406,6 +421,11 @@ class MainWindow(QMainWindow):
             self.update_roi_display()
             self.statusBar().showMessage("已取消创建ROI", 2000)
             self._set_ui_state(UIState.IDLE)
+            # 取消创建后，允许开始检测
+            if self.roi_mode and self.model_handler.is_model_loaded() and self.video_handler.is_video_ready():
+                self.start_stop_btn.setEnabled(True)
+                self.start_stop_btn.setText("开始检测")
+                self.start_stop_btn.setStyleSheet(STYLES["START_BUTTON"])
         
         elif self.ui_state == UIState.VIEWING:
             # 删除已存在的ROI
@@ -484,6 +504,11 @@ class MainWindow(QMainWindow):
 
             # 保存成功后进入查看状态
             self._set_ui_state(UIState.VIEWING)
+            
+            # 保存ROI后，允许开始检测
+            self.start_stop_btn.setEnabled(True)
+            self.start_stop_btn.setText("开始检测")
+            self.start_stop_btn.setStyleSheet(STYLES["START_BUTTON"])
         else:
             self.statusBar().showMessage("保存失败，请确保ROI至少包含3个点", 3000)
 
@@ -495,6 +520,10 @@ class MainWindow(QMainWindow):
 
         # 进入创建状态
         self._set_ui_state(UIState.CREATING)
+        
+        # 暂停检测和视频播放
+        if self.timer.isActive():
+            self.toggle_video()
         
         # 清除之前的绘制点和活动ROI
         self.roi_handler.clear_drawing_points()
@@ -541,9 +570,6 @@ class MainWindow(QMainWindow):
             points = self.roi_handler.get_roi_points(active_roi)
             self.roi_panel.update_coordinates(points)
             self.roi_panel.set_roi_name(self.roi_handler.get_active_roi_name())
-        # 如果定时器仍在运行，则停止它
-        if self.timer.isActive():
-            self.timer.stop()
 
     def setup_roi_mode(self):
         """设置ROI模式"""
@@ -558,15 +584,17 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage("无法打开摄像头", 3000)
                 return
         
-        # 停止检测
+        # 停止检测（如果正在运行）
         if self.timer.isActive():
             self.toggle_video()
         # 强制停止脉冲闪烁
         if self.pulse_timer.isActive():
             self.pulse_timer.stop()
-        self.start_stop_btn.setEnabled(False)
+        
+        # 不禁用开始检测按钮，允许用户手动开始检测
+        self.start_stop_btn.setEnabled(True)
         self.start_stop_btn.setText("开始检测")
-        self.start_stop_btn.setStyleSheet(STYLES["DISABLED_BUTTON"])
+        self.start_stop_btn.setStyleSheet(STYLES["START_BUTTON"])
         self.fps_label.setText("FPS: --")
         
         # 显示ROI面板
@@ -577,14 +605,10 @@ class MainWindow(QMainWindow):
         # 更新ROI面板
         self.update_roi_panel()
         
-        # 开始视频显示
-        self.timer.start(DEFAULT_SETTINGS["fps_update_interval"])
-        self.start_stop_btn.setEnabled(False)
-        self.start_stop_btn.setText("开始检测")
-        self.start_stop_btn.setStyleSheet(STYLES["DISABLED_BUTTON"])
-        self.fps_label.setText("FPS: --")
+        # 不自动开始视频显示，等待用户手动点击开始检测
+        # self.timer.start(DEFAULT_SETTINGS["fps_update_interval"])
         
-        self.statusBar().showMessage("ROI模式：点击视频区域添加ROI顶点", 3000)
+        self.statusBar().showMessage("ROI模式：点击视频区域添加ROI顶点，或点击开始检测按钮开始检测", 3000)
 
     def exit_roi_mode(self):
         """退出ROI模式"""
@@ -593,8 +617,12 @@ class MainWindow(QMainWindow):
             self.roi_handler.roi_mode = False
             self.roi_handler.clear_drawing_points()
             
+            # 设置停止标志并停止定时器
+            self.should_stop_detection = True
             if self.timer.isActive():
                 self.timer.stop()
+            if self.pulse_timer.isActive():
+                self.pulse_timer.stop()
             
             self.roi_panel.setVisible(False)
             self.start_stop_btn.setEnabled(True)
@@ -747,7 +775,7 @@ class MainWindow(QMainWindow):
 
     def check_ready_state(self):
         """检查就绪状态"""
-        if self.recording_mode or self.roi_mode:
+        if self.recording_mode:
             self.start_stop_btn.setEnabled(False)
             self.start_stop_btn.setText("开始检测")
             self.start_stop_btn.setStyleSheet(STYLES["DISABLED_BUTTON"])
@@ -763,9 +791,12 @@ class MainWindow(QMainWindow):
 
     def toggle_video(self):
         """切换视频检测状态"""
-        if self.recording_mode or self.roi_mode:
+        if self.recording_mode:
             return
         if self.timer.isActive():
+            # 立即设置停止标志
+            self.should_stop_detection = True
+            # 立即停止定时器
             self.timer.stop()
             self.pulse_timer.stop()
             self.start_stop_btn.setText("开始检测")
@@ -773,6 +804,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("检测已停止", 2000)
             self.fps_label.setText("FPS: --")
         else:
+            # 重置停止标志
+            self.should_stop_detection = False
             self.video_handler.frame_count = 0
             self.video_handler.last_time = time.time()
             self.timer.start(DEFAULT_SETTINGS["fps_update_interval"])
@@ -783,6 +816,10 @@ class MainWindow(QMainWindow):
 
     def update_frame(self):
         """更新视频帧"""
+        # 检查是否应该停止检测
+        if self.should_stop_detection:
+            return
+            
         if not self.video_handler.is_running():
             return
         
@@ -798,9 +835,10 @@ class MainWindow(QMainWindow):
             self.display_frame(frame)
             if self.video_handler.is_recording():
                 self.video_handler.write_frame(frame)
-            self.last_frame_time = time.time()
-            fps = 1.0 / (self.last_frame_time - start_time) if (self.last_frame_time - start_time) > 0 else 0
-            self.fps_label.setText(f"FPS: {fps:.2f}")
+            # 使用video_handler的FPS计算方法获取真实FPS
+            fps = self.video_handler.update_fps_counter()
+            if fps is not None:
+                self.fps_label.setText(f"FPS: {fps:.2f}")
             return
 
         # 非ROI模式下，进行目标检测
@@ -879,6 +917,8 @@ class MainWindow(QMainWindow):
         """设置录制模式"""
         self.exit_roi_mode()
         self.recording_mode = True
+        # 重置停止标志，确保录制模式能正常工作
+        self.should_stop_detection = False
         if self.video_handler.open_camera(0):
             self.statusBar().showMessage("准备录制训练数据", 3000)
             self.record_panel.setVisible(True)
@@ -907,6 +947,8 @@ class MainWindow(QMainWindow):
         if self.recording_mode:
             if self.video_handler.is_recording():
                 self.stop_recording()
+            # 设置停止标志并停止定时器
+            self.should_stop_detection = True
             if self.timer.isActive():
                 self.timer.stop()
                 if self.pulse_timer.isActive():
@@ -982,6 +1024,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """关闭事件处理"""
+        # 设置停止标志
+        self.should_stop_detection = True
+        
         # 停止所有定时器
         if self.timer.isActive():
             self.timer.stop()
@@ -1001,9 +1046,10 @@ class MainWindow(QMainWindow):
         # 释放资源
         self.video_handler.release()
         
-        event.accept() 
+        event.accept()
 
     def _toggle_roi_alert_flash(self):
         self.roi_alert_flash = not self.roi_alert_flash
-        # 强制刷新帧
-        self.update_frame() 
+        # 只有在没有停止标志时才强制刷新帧
+        if not self.should_stop_detection:
+            self.update_frame() 

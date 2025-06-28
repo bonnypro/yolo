@@ -12,7 +12,7 @@ DEFAULT_SETTINGS = {
     "window_position": (100, 100),
     "sidebar_width": 250,
     "video_min_size": (800, 600),
-    "fps_update_interval": 30,
+    "fps_update_interval": 50,
     "pulse_speed": 0.05,
     "record_timer_interval": 500,
     "default_model": "best.pt",
