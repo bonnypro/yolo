@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 
 # 应用信息
-APP_VERSION = "v1.0.0 by Chang"
+APP_VERSION = "v0.1.0 by Chang"
 APP_TITLE = "AI蒙皮铝屑观察助手"
 
 # 默认设置
@@ -12,7 +12,7 @@ DEFAULT_SETTINGS = {
     "window_position": (100, 100),
     "sidebar_width": 250,
     "video_min_size": (800, 600),
-    "fps_update_interval": 30,
+    "fps_update_interval": 50,
     "pulse_speed": 0.05,
     "record_timer_interval": 500,
     "default_model": "best.pt",
@@ -114,4 +114,14 @@ FILE_FILTERS = {
 VIDEO_CODECS = {
     "Windows": "mp4v",
     "Linux": "XVID"
+}
+
+# ROI相关配置
+ROI_CONFIG = {
+    "roi_folder": "roi_configs",
+    "max_roi_count": 99,
+    "temp_roi_file": "temp_roi.json",
+    "main_config_file": "roi_config.json",
+    "roi_file_pattern": "ROI_{}.json",
+    "max_points": 100
 } 

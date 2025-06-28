@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 
-from config import STYLES
+from config import STYLES, ROI_CONFIG
 from core.roi_handler import ROIHandler
 
 
@@ -62,7 +62,7 @@ class ROIPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.coordinate_boxes = []
-        self.roi_folder = "roi_configs"  # ROI文件夹路径
+        self.roi_folder = ROI_CONFIG["roi_folder"]  # ROI文件夹路径
         self.init_ui()
     
     def init_ui(self):
@@ -298,12 +298,12 @@ class ROIPanel(QWidget):
     
     def update_roi_count_display(self, count):
         """更新ROI数量显示"""
-        self.roi_count_label.setText(f"ROI: {count}/99")
-        
+        max_count = ROI_CONFIG["max_roi_count"]
+        self.roi_count_label.setText(f"ROI: {count}/{max_count}")
         # 根据数量设置颜色
-        if count >= 99:
+        if count >= max_count:
             self.roi_count_label.setStyleSheet("color: #F92672; font-size: 11px; font-weight: bold;")  # 红色
-        elif count >= 80:
+        elif count >= int(max_count * 0.8):
             self.roi_count_label.setStyleSheet("color: #FD971F; font-size: 11px; font-weight: bold;")  # 橙色
         else:
             self.roi_count_label.setStyleSheet("color: #A6E22E; font-size: 11px; font-weight: bold;")  # 绿色
